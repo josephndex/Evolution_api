@@ -1,0 +1,167 @@
+version: '3.8'
+
+services:
+  # Evolution API Engine
+  evolution_api:
+    image: evoapicloud/evolution-api:latest
+    container_name: evolution_api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      # Server Configuration
+      - SERVER_URL=http://localhost:8080
+      - SERVER_TYPE=http
+      - SERVER_PORT=8080
+      
+      # Authentication - CHANGE THIS API KEY!
+      - AUTHENTICATION_API_KEY=B6D711FCDE4D4FD5936544120E713976
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+      
+      # Database Configuration (PostgreSQL)
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://evolution:evolution_pass@postgres:5432/evolution?schema=public
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution_api
+      
+      # Database Save Options
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+      - DATABASE_SAVE_MESSAGE_UPDATE=true
+      - DATABASE_SAVE_DATA_CONTACTS=true
+      - DATABASE_SAVE_DATA_CHATS=true
+      - DATABASE_SAVE_DATA_LABELS=true
+      - DATABASE_SAVE_DATA_HISTORIC=true
+      - DATABASE_DELETE_MESSAGE=true
+      
+      # Redis Cache Configuration
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/0
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_REDIS_SAVE_INSTANCES=false
+      - CACHE_LOCAL_ENABLED=false
+      
+      # Logging
+      - LOG_LEVEL=ERROR,WARN,DEBUG,INFO,LOG
+      - LOG_COLOR=true
+      - LOG_BAILEYS=error
+      
+      # Instance Settings
+      - DEL_INSTANCE=false
+      - CONFIG_SESSION_PHONE_CLIENT=Evolution API
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+      
+      # QR Code Settings
+      - QRCODE_LIMIT=30
+      - QRCODE_COLOR=#175197
+      
+      # Webhook Settings (for n8n integration)
+      - WEBHOOK_GLOBAL_ENABLED=false
+      - WEBHOOK_GLOBAL_URL=
+      - WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=false
+      - WEBHOOK_EVENTS_APPLICATION_STARTUP=false
+      - WEBHOOK_EVENTS_QRCODE_UPDATED=true
+      - WEBHOOK_EVENTS_MESSAGES_SET=true
+      - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
+      - WEBHOOK_EVENTS_MESSAGES_EDITED=true
+      - WEBHOOK_EVENTS_MESSAGES_UPDATE=true
+      - WEBHOOK_EVENTS_MESSAGES_DELETE=true
+      - WEBHOOK_EVENTS_SEND_MESSAGE=true
+      - WEBHOOK_EVENTS_CONTACTS_SET=true
+      - WEBHOOK_EVENTS_CONTACTS_UPSERT=true
+      - WEBHOOK_EVENTS_CONTACTS_UPDATE=true
+      - WEBHOOK_EVENTS_PRESENCE_UPDATE=true
+      - WEBHOOK_EVENTS_CHATS_SET=true
+      - WEBHOOK_EVENTS_CHATS_UPSERT=true
+      - WEBHOOK_EVENTS_CHATS_UPDATE=true
+      - WEBHOOK_EVENTS_CHATS_DELETE=true
+      - WEBHOOK_EVENTS_GROUPS_UPSERT=true
+      - WEBHOOK_EVENTS_GROUPS_UPDATE=true
+      - WEBHOOK_EVENTS_GROUP_PARTICIPANTS_UPDATE=true
+      - WEBHOOK_EVENTS_CONNECTION_UPDATE=true
+      - WEBHOOK_EVENTS_LABELS_EDIT=true
+      - WEBHOOK_EVENTS_LABELS_ASSOCIATION=true
+      - WEBHOOK_EVENTS_CALL=true
+      
+      # CORS Settings
+      - CORS_ORIGIN=*
+      - CORS_METHODS=GET,POST,PUT,DELETE
+      - CORS_CREDENTIALS=true
+      
+      # Integrations (enable as needed)
+      - TYPEBOT_ENABLED=false
+      - CHATWOOT_ENABLED=false
+      - OPENAI_ENABLED=false
+      - DIFY_ENABLED=false
+      - N8N_ENABLED=true
+      - EVOAI_ENABLED=false
+      
+      # Telemetry
+      - TELEMETRY_ENABLED=true
+      
+      # Language
+      - LANGUAGE=en
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - evolution-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # Evolution Manager (Dashboard UI)
+  evolution_manager:
+    image: evoapicloud/evolution-manager:latest
+    container_name: evolution_manager
+    restart: always
+    ports:
+      - "3000:80"
+    networks:
+      - evolution-network
+    depends_on:
+      - evolution_api
+
+  # PostgreSQL Database (Required for persistence)
+  postgres:
+    image: postgres:15-alpine
+    container_name: evolution_postgres
+    restart: always
+    environment:
+      - POSTGRES_DB=evolution
+      - POSTGRES_USER=evolution
+      - POSTGRES_PASSWORD=evolution_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - evolution-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: evolution_redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - evolution-network
+
+volumes:
+  evolution_instances:
+  postgres_data:
+  redis_data:
+
+networks:
+  evolution-network:
+    name: evolution-network
+    driver: bridge
